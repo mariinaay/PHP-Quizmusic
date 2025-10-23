@@ -33,7 +33,7 @@ if (ini_get("session.use_cookies")) {
 
 // 📚 ÉTAPE 4 : Détruire la session côté serveur
 session_destroy();
-
+-
 // 📚 ÉTAPE 5 : Rediriger vers la page de connexion
 header('Location: login.php');
 exit;

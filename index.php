@@ -1,51 +1,55 @@
 <?php
 /**
- * QuizMusic - Page d'accueil refactorisée avec authentification
- * Jour 4 : Gestion des utilisateurs connectés
+ * QuizMusic - Page d'accueil fusionnée avec badges et authentification
  */
 
-// 📚 CONCEPT : Démarrage de session en premier
+// 📚 Démarrage de session
 session_start();
 
 // 📚 Chargement des classes nécessaires
 require_once 'classes/Database.php';
 
-// 📚 CONCEPT : Vérification de connexion
-// Si l'utilisateur n'est pas connecté, on le redirige vers login
+// 📚 Vérification de connexion
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
 }
 
-// 📚 CONCEPT : Affichage d'un message de succès (Flash Message)
-// Ce message s'affiche une seule fois puis disparaît
+// 📚 Récupération du pseudo
+$pseudo = $_SESSION['user_pseudo'];
+
+// 📚 Gestion du message de succès (Flash Message)
 $messageSucces = '';
 if (isset($_SESSION['message_succes'])) {
     $messageSucces = $_SESSION['message_succes'];
-    // On supprime le message après l'avoir récupéré
     unset($_SESSION['message_succes']);
 }
 
-// 📚 Chargement des questionnaires depuis la BDD
-// Au lieu d'avoir un tableau hard-codé, on les récupère de la BDD
+// 📚 Connexion à la base de données
 $pdo = Database::getConnexion();
+
+// 📚 Chargement des questionnaires actifs
 $stmt = $pdo->query("
     SELECT *
     FROM questionnaires
     WHERE actif = 1
     ORDER BY difficulte ASC
 ");
-$questionnaires = $stmt->fetchAll();
+$questionnaires = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// 📚 CONCEPT : Fonction pour afficher la difficulté
+// 🧮 Comptage du nombre de questions par questionnaire
+$stmtCount = $pdo->query("
+    SELECT questionnaire_id, COUNT(*) AS nb_questions
+    FROM questions
+    GROUP BY questionnaire_id
+");
+$questionsParQuiz = $stmtCount->fetchAll(PDO::FETCH_KEY_PAIR); // [id_questionnaire => nb_questions]
+
+// 📚 Fonction pour afficher la difficulté
 function afficherDifficulte($niveau) {
     $etoiles = '';
     for ($i = 1; $i <= 5; $i++) {
-        if ($i <= $niveau) {
-            $etoiles .= '⭐';
-        } else {
-            $etoiles .= '☆';
-        }
+        $etoiles .= ($i <= $niveau) ? '⭐' : '☆';
     }
     return $etoiles;
 }
@@ -60,16 +64,16 @@ function afficherDifficulte($niveau) {
     <title>QuizMusic 🎵 - Testez vos connaissances musicales !</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                backgroundImage: {
-                    'gradient-quiz': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    'gradient-alt': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+        tailwind.config = {
+            theme: {
+                extend: {
+                    backgroundImage: {
+                        'gradient-quiz': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        'gradient-alt': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+                    }
                 }
             }
         }
-    }
     </script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -77,97 +81,96 @@ function afficherDifficulte($niveau) {
 <body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-6xl">
 
-        <!-- 📚 NOUVEAU : Barre de navigation avec profil utilisateur -->
+        <!-- Barre de navigation -->
         <nav class="flex justify-between items-center mb-8">
             <div class="text-white">
                 <h2 class="text-xl font-semibold">
-                    👋 Bienvenue, <?php echo htmlspecialchars($_SESSION['user_pseudo']); ?> !
+                    👋 Bienvenue, <?=$pseudo?> !
                 </h2>
             </div>
 
             <div class="flex gap-4">
-                <!-- Lien vers l'historique -->
                 <a href="historique.php"
-                   class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-all duration-200 backdrop-blur-sm">
+                    class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-all duration-200 backdrop-blur-sm">
                     📊 Mon historique
                 </a>
-
-                <!-- Lien de déconnexion -->
+                <a href="profile.php"
+                    class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-all duration-200 backdrop-blur-sm">
+                    👤 Mon profil
+                </a>
                 <a href="logout.php"
-                   class="bg-red-500/80 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-all duration-200">
+                    class="bg-red-500/80 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-all duration-200">
                     🚪 Déconnexion
                 </a>
             </div>
         </nav>
 
-        <!-- 📚 NOUVEAU : Affichage du message de succès (inscription réussie) -->
+        <!-- Message de succès -->
         <?php if ($messageSucces): ?>
             <div class="bg-green-100 border border-green-400 text-green-700 px-6 py-4 rounded-xl mb-8 animate-pulse">
                 <div class="flex items-center">
                     <span class="text-2xl mr-3">✅</span>
-                    <span class="font-medium"><?php echo htmlspecialchars($messageSucces); ?></span>
+                    <span class="font-medium"><?= htmlspecialchars($messageSucces); ?></span>
                 </div>
             </div>
         <?php endif; ?>
 
-        <!-- En-tête avec titre principal -->
+        <!-- En-tête principal -->
         <header class="text-center mb-12">
-            <h1 class="text-5xl md:text-6xl font-bold text-white mb-4">
-                🎵 QuizMusic
-            </h1>
-            <p class="text-xl md:text-2xl text-purple-200 mb-2">
-                Testez vos connaissances musicales !
-            </p>
-            <p class="text-lg text-purple-300">
-                Choisissez votre thème et découvrez votre niveau musical
-            </p>
+            <h1 class="text-5xl md:text-6xl font-bold text-white mb-4">🎵 QuizMusic</h1>
+            <p class="text-xl md:text-2xl text-purple-200 mb-2">Testez vos connaissances musicales !</p>
+            <p class="text-lg text-purple-300">Choisissez votre thème et découvrez votre niveau musical</p>
         </header>
 
         <!-- Grille des questionnaires -->
         <main class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-            <?php
-            // 📚 CONCEPT : Boucle sur les données de la BDD
-            // Au lieu d'un tableau PHP, on parcourt les résultats SQL
-            foreach ($questionnaires as $quiz):
-            ?>
-            <div class="bg-white rounded-2xl shadow-xl overflow-hidden transform hover:scale-105 transition-all duration-300 hover:shadow-2xl">
+            <?php foreach ($questionnaires as $quiz): ?>
+                <div class="bg-white rounded-2xl shadow-xl overflow-hidden transform hover:scale-105 transition-all duration-300 hover:shadow-2xl">
 
-                <!-- En-tête colorée de la card -->
-                <div class="bg-gradient-to-r <?php echo $quiz['couleur']; ?> p-6 text-white">
-                    <div class="flex items-center justify-between mb-3">
-                        <span class="text-4xl"><?php echo $quiz['emoji']; ?></span>
-                        <!-- 📚 NOTE : On pourrait afficher le nombre de questions depuis la BDD -->
-                        <span class="text-sm font-medium bg-white/20 px-2 py-1 rounded-full">
-                            5 questions
-                        </span>
+                    <!-- En-tête colorée -->
+                    <div class="bg-gradient-to-r <?= $quiz['couleur']; ?> p-6 text-white">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-4xl"><?= $quiz['emoji']; ?></span>
+                            <span class="text-sm font-medium bg-white/20 px-2 py-1 rounded-full">
+                                <?php
+                                $nb = min(5, $questionsParQuiz[$quiz['id']] ?? 0);
+                                echo $nb . ' question' . ($nb > 1 ? 's' : '');
+                                ?>
+                            </span>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-2"><?= htmlspecialchars($quiz['titre']); ?></h3>
+                        <div class="text-sm opacity-90">
+                            Difficulté : <?= afficherDifficulte($quiz['difficulte']); ?>
+                        </div>
+
+                        <!-- Affichage des badges si présents -->
+                        <?php if (!empty($quiz['badges'])): ?>
+                            <div class="flex gap-2 mt-2 flex-wrap">
+                                <?php
+                                $badges = json_decode($quiz['badges'], true); // Suppose un champ JSON
+                                if (is_array($badges)):
+                                    foreach ($badges as $badge): ?>
+                                        <span class="bg-yellow-400 text-white px-2 py-1 rounded-full text-sm"><?= htmlspecialchars($badge); ?></span>
+                                <?php endforeach; endif; ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
-                    <h3 class="text-2xl font-bold mb-2"><?php echo htmlspecialchars($quiz['titre']); ?></h3>
-                    <div class="text-sm opacity-90">
-                        Difficulté : <?php echo afficherDifficulte($quiz['difficulte']); ?>
+
+                    <!-- Contenu -->
+                    <div class="p-6">
+                        <p class="text-gray-600 mb-6 leading-relaxed"><?= htmlspecialchars($quiz['description']); ?></p>
+                        <a href="quiz.php?theme=<?= urlencode($quiz['code']); ?>"
+                            class="block w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl text-center transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
+                            🎯 Commencer le quiz
+                        </a>
                     </div>
                 </div>
-
-                <!-- Contenu de la card -->
-                <div class="p-6">
-                    <p class="text-gray-600 mb-6 leading-relaxed">
-                        <?php echo htmlspecialchars($quiz['description']); ?>
-                    </p>
-
-                    <!-- Bouton pour démarrer le quiz -->
-                    <a href="quiz.php?theme=<?php echo urlencode($quiz['code']); ?>"
-                        class="block w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl text-center transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
-                        🎯 Commencer le quiz
-                    </a>
-                </div>
-            </div>
             <?php endforeach; ?>
         </main>
 
         <!-- Section informations -->
         <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-8 text-center">
-            <h2 class="text-2xl font-bold text-white mb-4">
-                🏆 Comment ça marche ?
-            </h2>
+            <h2 class="text-2xl font-bold text-white mb-4">🏆 Comment ça marche ?</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-purple-200">
                 <div>
                     <div class="text-3xl mb-2">🎯</div>
@@ -177,7 +180,7 @@ function afficherDifficulte($niveau) {
                 <div>
                     <div class="text-3xl mb-2">🎵</div>
                     <h3 class="font-semibold mb-2">Jouez</h3>
-                    <p class="text-sm">Répondez aux 5 questions sans stress</p>
+                    <p class="text-sm">Répondez aux questions sans stress</p>
                 </div>
                 <div>
                     <div class="text-3xl mb-2">🏅</div>
@@ -190,10 +193,7 @@ function afficherDifficulte($niveau) {
 
     <!-- Footer -->
     <footer class="text-center py-8">
-        <p class="text-purple-300 text-sm">
-            🎓 QuizMusic - Projet pédagogique PHP Jour 4 (Architecture POO + BDD)
-        </p>
+        <p class="text-purple-300 text-sm">🎓 QuizMusic - Projet pédagogique PHP Jour 4 (Architecture POO + BDD)</p>
     </footer>
 </body>
-
 </html>
